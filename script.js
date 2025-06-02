@@ -18,13 +18,14 @@ class FigmaToLowcodeTransformer {
 
     this.hierarchyMapping = {
       'Primary': 'brand',
-      'Secondary': 'secondary',
-      'Tertiary': 'tertiary'
+      'Secondary': 'neutral',
+      'Destructive': 'error',
     };
 
     this.iconMapping = {
-      'clock': 'SvgRadioSelect', // Map specific Figma icons to low-code icons
+      'clock': 'SvgRadioSelect', 
       'placeholder': 'SvgRadioSelect'
+      
     };
 
     this.colorVariableMapping = {
@@ -36,12 +37,6 @@ class FigmaToLowcodeTransformer {
     };
   }
 
-  /**
-   * Main transformation function
-   * @param {Object} figmaJson - Figma component JSON
-   * @param {string} componentId - Optional component ID, will generate if not provided
-   * @returns {Object} Low-code component JSON
-   */
   transform(figmaJson, componentId = null) {
     const figmaNode = this.extractFigmaNode(figmaJson);
     if (!figmaNode) {
@@ -50,10 +45,11 @@ class FigmaToLowcodeTransformer {
 
     const componentProps = figmaNode.componentProperties || {};
     const textContent = this.extractTextContent(figmaNode);
-    const icons = this.extractIcons(figmaNode);
+    const icons =  this.extractIcons(figmaNode);
     const colorInfo = this.extractColorInfo(figmaNode);
+    const url = this.extractUrlInfo(figmaNode);
 
-    return {
+    const componentData = {
       [componentId || this.generateId()]: {
         component: {
           componentType: this.mapComponentType(figmaNode.name),
@@ -67,7 +63,8 @@ class FigmaToLowcodeTransformer {
             styles: colorInfo
           },
           content: {
-            label: textContent
+            label: textContent,
+            ...(url && { url: url }) 
           }
         },
         visibility: {
@@ -80,6 +77,8 @@ class FigmaToLowcodeTransformer {
         parentId: "b_uClzo" // Default parent, should be configurable
       }
     };
+
+    return componentData;
   }
 
   /**
@@ -108,7 +107,12 @@ class FigmaToLowcodeTransformer {
    */
   extractIcons(figmaNode) {
     const icons = { leading: null, trailing: null };
-    
+    const componentProps = figmaNode.componentProperties || {};
+    if (componentProps.State?.value === 'Loading') {
+      icons.leading = 'NoCodeLoader';
+      icons.trailing = null;
+      return icons;
+    }
     if (figmaNode.children) {
       figmaNode.children.forEach(child => {
         if (child.type === 'INSTANCE' && child.componentPropertyReferences) {
@@ -158,6 +162,45 @@ class FigmaToLowcodeTransformer {
       activeColor: "active:text-brand-secondary",
       hoverColor: "hover:text-brand-secondary"
     };
+  }
+
+  /**
+   * Extract URL information from Figma node
+   * Looks for hyperlinks in text nodes and their style overrides
+   */
+  extractUrlInfo(figmaNode) {
+    const textNode = this.findNodeByType(figmaNode, 'TEXT');
+    
+    if (!textNode) return null;
+
+    // Check for hyperlink in style override table
+    if (textNode.styleOverrideTable) {
+      for (const styleKey in textNode.styleOverrideTable) {
+        const style = textNode.styleOverrideTable[styleKey];
+        if (style.hyperlink && style.hyperlink.url) {
+          return style.hyperlink.url;
+        }
+      }
+    }
+
+    // Check for hyperlink in main style
+    if (textNode.style && textNode.style.hyperlink && textNode.style.hyperlink.url) {
+      return textNode.style.hyperlink.url;
+    }
+
+    // Check for hyperlink in character styles (if text has mixed formatting)
+    if (textNode.characterStyleOverrides && textNode.characterStyleOverrides.length > 0) {
+      // Find the most common style override that might contain hyperlink
+      const styleOverrideId = textNode.characterStyleOverrides[0];
+      if (textNode.styleOverrideTable && textNode.styleOverrideTable[styleOverrideId]) {
+        const style = textNode.styleOverrideTable[styleOverrideId];
+        if (style.hyperlink && style.hyperlink.url) {
+          return style.hyperlink.url;
+        }
+      }
+    }
+
+    return null;
   }
 
   /**

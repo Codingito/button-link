@@ -3,7 +3,7 @@
  * Transforms Figma JSON structure to low-code component JSON
  */
 
-import figmaData from "./figma.js";
+import figmaData from "./figmaButton.js";
 
 class FigmaToLowcodeTransformer {
   constructor() {

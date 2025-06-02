@@ -1,5 +1,5 @@
 
-import figmaData from "./figma.js";
+import figmaData from "./figmaButton.js";
 
 
 

@@ -1,0 +1,31 @@
+{
+  "b_CHVXi": {
+    "component": {
+      "componentType": "Link",
+      "appearance": {
+        "startDecorator": "SvgRadioSelect",
+        "color": "brand",
+        "underline": "hover",
+        "endDecorator": "SvgRadioSelect",
+        "variant": "text-lg",
+        "disabled": false,
+        "styles": {
+          "color": "text-brand-tertiary",
+          "hoverColor": "hover:text-brand-secondary",
+          "activeColor": "active:text-brand-secondary"
+        }
+      },
+      "content": {
+        "label": "Button CTA"
+      }
+    },
+    "visibility": {
+      "value": true
+    },
+    "dpOn": [],
+    "displayName": "Buttons_Link_313",
+    "dataSourceIds": [],
+    "id": "b_CHVXi",
+    "parentId": "b_uClzo"
+  }
+}

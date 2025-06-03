@@ -3,7 +3,7 @@
 # EXECUTION 
 Run node script.js
 
-# Component Property and Mappings
+# Component Property Mappings
 | Figma Property                          | Low-Code Output                             |
 |----------------------------------------|---------------------------------------------|
 | componentProperties.Size.value       | appearance.variant → "text-sm"          |

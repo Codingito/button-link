@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "@types/node-fetch": "^2.6.12",
+    "transcript": "^0.0.6",
+    "typescript": "^5.8.3"
+  }
+}

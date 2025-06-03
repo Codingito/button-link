@@ -1,161 +1,47 @@
-/**
- * Figma to Low-code Component Transformer
- * Transforms Figma JSON structure to low-code component JSON
- */
+import * as fs from 'node:fs';
+import fetch from 'node-fetch';
 
-import figmaData from "./figmaButton.js";
-
-// Type definitions for Figma JSON structure
-interface FigmaHyperlink {
-  url: string;
-}
-
-interface FigmaStyle {
-  hyperlink?: FigmaHyperlink;
-}
-
-interface FigmaBoundVariable {
-  id: string;
-}
-
-interface FigmaBoundVariables {
-  fills?: FigmaBoundVariable[];
-}
-
-interface FigmaComponentPropertyReference {
-  visible?: string;
-}
-
-interface FigmaComponentProperty {
-  value: string;
-}
-
-interface FigmaComponentProperties {
-  Size?: FigmaComponentProperty;
-  Hierarchy?: FigmaComponentProperty;
-  State?: FigmaComponentProperty;
-}
-
-interface FigmaNode {
-  type: string;
-  name?: string;
-  characters?: string;
-  children?: FigmaNode[];
-  componentProperties?: FigmaComponentProperties;
-  componentPropertyReferences?: FigmaComponentPropertyReference;
-  boundVariables?: FigmaBoundVariables;
-  style?: FigmaStyle;
-  styleOverrideTable?: Record<string, FigmaStyle>;
-  characterStyleOverrides?: number[];
-}
-
-interface FigmaDocument {
-  document: FigmaNode;
-}
-
-interface FigmaResult {
-  nodes: Record<string, FigmaDocument>;
-}
-
-interface FigmaJson {
-  Result?: FigmaResult;
-}
-
-// Type definitions for low-code component structure
-interface ColorInfo {
+// Interface for mappings
+interface ColorStyles {
   color: string;
   hoverColor: string;
   activeColor: string;
 }
 
-interface Icons {
-  leading: string | null;
-  trailing: string | null;
+interface FigmaNode {
+  name?: string;
+  type?: string;
+  children?: FigmaNode[];
+  componentProperties?: Record<string, { value: string }>;
+  componentPropertyReferences?: Record<string, string>;
+  characters?: string;
+  style?: any;
+  styleOverrideTable?: any;
+  characterStyleOverrides?: number[];
+  boundVariables?: {
+    fills?: { id: string }[];
+  };
 }
 
-interface ComponentAppearance {
-  startDecorator: string | null;
-  color: string;
-  underline: string;
-  endDecorator: string | null;
-  variant: string;
-  disabled: boolean;
-  styles: ColorInfo;
-}
-
-interface ComponentContent {
-  label: string;
-  url?: string;
-}
-
-interface ComponentDefinition {
-  componentType: string;
-  appearance: ComponentAppearance;
-  content: ComponentContent;
-}
-
-interface ComponentVisibility {
-  value: boolean;
-}
-
-interface LowcodeComponent {
-  component: ComponentDefinition;
-  visibility: ComponentVisibility;
-  dpOn: string[];
-  displayName: string;
-  dataSourceIds: string[];
-  id: string;
-  parentId: string;
-}
-
-interface TransformResult {
-  [key: string]: LowcodeComponent;
-}
-
-// Mapping type definitions
-interface SizeMapping {
-  [key: string]: string;
-}
-
-interface HierarchyMapping {
-  [key: string]: string;
-}
-
-interface IconMapping {
-  [key: string]: string;
-}
-
-interface ColorVariableMapping {
-  [key: string]: ColorInfo;
+interface FigmaJson {
+  Result?: {
+    nodes: Record<string, { document: FigmaNode; componentSets?: Record<string, { name: string }> }>;
+  };
+  result?: {
+    nodes: Record<string, { document: FigmaNode; componentSets?: Record<string, { name: string }> }>;
+  };
 }
 
 class FigmaToLowcodeTransformer {
-  private sizeMapping: SizeMapping;
-  private hierarchyMapping: HierarchyMapping;
-  private iconMapping: IconMapping;
-  private colorVariableMapping: ColorVariableMapping;
+  sizeMapping: Record<string, string>;
+  hierarchyMapping: Record<string, string>;
+  iconMapping: Record<string, string>;
+  colorVariableMapping: Record<string, ColorStyles>;
 
   constructor() {
-    // Mapping tables for component properties
-    this.sizeMapping = {
-      'xs': 'text-xs',
-      'sm': 'text-sm', 
-      'md': 'text-base',
-      'lg': 'text-lg',
-      'xl': 'text-xl'
-    };
-
-    this.hierarchyMapping = {
-      'Primary': 'brand',
-      'Secondary': 'neutral',
-      'Destructive': 'error',
-    };
-
-    this.iconMapping = {
-      'clock': 'SvgRadioSelect', 
-      'placeholder': 'SvgRadioSelect'
-    };
-
+    this.sizeMapping = { xs: 'text-xs', sm: 'text-sm', md: 'text-base', lg: 'text-lg', xl: 'text-xl' };
+    this.hierarchyMapping = { Primary: 'brand', Secondary: 'neutral', Destructive: 'error' };
+    this.iconMapping = { clock: 'SvgRadioSelect', placeholder: 'SvgRadioSelect' };
     this.colorVariableMapping = {
       'VariableID:13119001a2cb3bf4ec2b3be8271d31bb940fa096/37457:7': {
         color: 'text-brand-tertiary',
@@ -165,11 +51,9 @@ class FigmaToLowcodeTransformer {
     };
   }
 
-  transform(figmaJson: FigmaJson, componentId?: string): TransformResult {
+  transform(figmaJson: FigmaJson, componentId: string = this.generateId()) {
     const figmaNode = this.extractFigmaNode(figmaJson);
-    if (!figmaNode) {
-      throw new Error('Invalid Figma JSON structure');
-    }
+    if (!figmaNode) throw new Error('Invalid Figma JSON structure');
 
     const componentProps = figmaNode.componentProperties || {};
     const textContent = this.extractTextContent(figmaNode);
@@ -177,287 +61,197 @@ class FigmaToLowcodeTransformer {
     const colorInfo = this.extractColorInfo(figmaNode);
     const url = this.extractUrlInfo(figmaNode);
 
-    const id = componentId || this.generateId();
-    const componentData: TransformResult = {
-      [id]: {
+    return {
+      [componentId]: {
         component: {
           componentType: this.mapComponentType(figmaNode.name),
           appearance: {
-            startDecorator: icons.leading,
+            startDecorator: icons.leading || null,
             color: this.mapHierarchyToColor(componentProps.Hierarchy?.value),
             underline: "hover",
-            endDecorator: icons.trailing,
+            endDecorator: icons.trailing || null,
             variant: this.mapSizeToVariant(componentProps.Size?.value),
             disabled: this.mapStateToDisabled(componentProps.State?.value),
             styles: colorInfo
           },
           content: {
             label: textContent,
-            ...(url && { url: url }) 
+            ...(url && { url })
           }
         },
-        visibility: {
-          value: true
-        },
+        visibility: { value: true },
         dpOn: [],
         displayName: this.generateDisplayName(figmaNode.name),
         dataSourceIds: [],
-        id: id,
-        parentId: "b_uClzo" // Default parent, should be configurable
+        id: componentId,
+        parentId: "b_uClzo"
       }
     };
-
-    return componentData;
   }
 
-  /**
-   * Extract the main Figma node from the JSON structure
-   */
-  private extractFigmaNode(figmaJson: FigmaJson): FigmaNode | null {
-    if (figmaJson.Result?.nodes) {
-      const nodeKeys = Object.keys(figmaJson.Result.nodes);
-      if (nodeKeys.length > 0) {
-        return figmaJson.Result.nodes[nodeKeys[0]].document;
+  extractFigmaNode(json: FigmaJson): FigmaNode | null {
+    const nodes = json.Result?.nodes;
+    return nodes ? nodes[Object.keys(nodes)[0]].document : null;
+  }
+
+  findNodeByType(node: FigmaNode, type: string): FigmaNode | null {
+    if (node.type === type) return node;
+    return node.children?.reduce((found, child) => found || this.findNodeByType(child, type), null) || null;
+  }
+
+  extractTextContent(node: FigmaNode): string {
+    return this.findNodeByType(node, 'TEXT')?.characters || 'Button CTA';
+  }
+
+  extractIcons(node: FigmaNode): { leading: string | null; trailing: string | null } {
+    const props = node.componentProperties || {};
+    if (props.State?.value === 'Loading') return { leading: 'NoCodeLoader', trailing: null };
+
+    const result = { leading: null, trailing: null };
+    node.children?.forEach(child => {
+      if (child.type === 'INSTANCE' && child.componentPropertyReferences) {
+        const refs = child.componentPropertyReferences;
+        if (refs.visible === '⬅️ Icon leading#3287:1577') result.leading = this.iconMapping[child.name!] || child.name!;
+        if (refs.visible === '➡️ Icon trailing#3287:2338') result.trailing = this.iconMapping[child.name!] || child.name!;
       }
-    }
-    return null;
+    });
+    return result;
   }
 
-  /**
-   * Extract text content from Figma node
-   */
-  private extractTextContent(figmaNode: FigmaNode): string {
-    const textNode = this.findNodeByType(figmaNode, 'TEXT');
-    return textNode?.characters || 'Button CTA';
-  }
-
-  /**
-   * Extract icon information from Figma node
-   */
-  private extractIcons(figmaNode: FigmaNode): Icons {
-    const icons: Icons = { leading: null, trailing: null };
-    const componentProps = figmaNode.componentProperties || {};
-    
-    if (componentProps.State?.value === 'Loading') {
-      icons.leading = 'NoCodeLoader';
-      icons.trailing = null;
-      return icons;
-    }
-    
-    if (figmaNode.children) {
-      figmaNode.children.forEach(child => {
-        if (child.type === 'INSTANCE' && child.componentPropertyReferences) {
-          const refs = child.componentPropertyReferences;
-          
-          // Check for leading icon
-          if (refs.visible === '⬅️ Icon leading#3287:1577') {
-            const iconName = this.extractIconName(child);
-            icons.leading = this.iconMapping[iconName] || iconName;
-          }
-          
-          // Check for trailing icon
-          if (refs.visible === '➡️ Icon trailing#3287:2338') {
-            const iconName = this.extractIconName(child);
-            icons.trailing = this.iconMapping[iconName] || iconName;
-          }
-        }
-      });
-    }
-
-    return icons;
-  }
-
-  /**
-   * Extract icon name from icon instance
-   */
-  private extractIconName(iconInstance: FigmaNode): string {
-    return iconInstance.name || 'placeholder';
-  }
-
-  /**
-   * Extract color information from bound variables
-   */
-  private extractColorInfo(figmaNode: FigmaNode): ColorInfo {
-    const textNode = this.findNodeByType(figmaNode, 'TEXT');
-    if (textNode?.boundVariables?.fills?.[0]) {
-      const colorVariableId = textNode.boundVariables.fills[0].id;
-      return this.colorVariableMapping[colorVariableId] || {
-        color: "text-brand-tertiary",
-        activeColor: "active:text-brand-secondary", 
-        hoverColor: "hover:text-brand-secondary"
-      };
-    }
-    
-    return {
+  extractColorInfo(node: FigmaNode): ColorStyles {
+    const text = this.findNodeByType(node, 'TEXT');
+    const id = text?.boundVariables?.fills?.[0]?.id;
+    return this.colorVariableMapping[id!] || {
       color: "text-brand-tertiary",
       activeColor: "active:text-brand-secondary",
       hoverColor: "hover:text-brand-secondary"
     };
   }
 
-  /**
-   * Extract URL information from Figma node
-   * Looks for hyperlinks in text nodes and their style overrides
-   */
-  private extractUrlInfo(figmaNode: FigmaNode): string | null {
-    const textNode = this.findNodeByType(figmaNode, 'TEXT');
-    
-    if (!textNode) return null;
+  extractUrlInfo(node: FigmaNode): string | null {
+    const text = this.findNodeByType(node, 'TEXT');
+    if (!text) return null;
 
-    // Check for hyperlink in style override table
-    if (textNode.styleOverrideTable) {
-      for (const styleKey in textNode.styleOverrideTable) {
-        const style = textNode.styleOverrideTable[styleKey];
-        if (style.hyperlink && style.hyperlink.url) {
-          return style.hyperlink.url;
-        }
-      }
+    const allStyles = { ...text.styleOverrideTable };
+    if (text.characterStyleOverrides?.length) {
+      allStyles[text.characterStyleOverrides[0]] = allStyles[text.characterStyleOverrides[0]];
     }
 
-    // Check for hyperlink in main style
-    if (textNode.style && textNode.style.hyperlink && textNode.style.hyperlink.url) {
-      return textNode.style.hyperlink.url;
-    }
+    const hyperlinks = [text.style, ...Object.values(allStyles)]
+      .filter(s => s?.hyperlink?.url)
+      .map(s => s.hyperlink.url);
 
-    // Check for hyperlink in character styles (if text has mixed formatting)
-    if (textNode.characterStyleOverrides && textNode.characterStyleOverrides.length > 0) {
-      // Find the most common style override that might contain hyperlink
-      const styleOverrideId = textNode.characterStyleOverrides[0];
-      if (textNode.styleOverrideTable && textNode.styleOverrideTable[styleOverrideId]) {
-        const style = textNode.styleOverrideTable[styleOverrideId];
-        if (style.hyperlink && style.hyperlink.url) {
-          return style.hyperlink.url;
-        }
-      }
-    }
-
-    return null;
+    return hyperlinks[0] || null;
   }
 
-  /**
-   * Find node by type in the component tree
-   */
-  private findNodeByType(node: FigmaNode, type: string): FigmaNode | null {
-    if (node.type === type) return node;
-    
-    if (node.children) {
-      for (const child of node.children) {
-        const found = this.findNodeByType(child, type);
-        if (found) return found;
-      }
-    }
-    
-    return null;
+  mapComponentType(name?: string): string {
+    return name?.toLowerCase().includes('link') ? 'Link' : 'Button';
   }
 
-  /**
-   * Map Figma component name to low-code component type
-   */
-  private mapComponentType(figmaName?: string): string {
-    if (figmaName?.includes('Link') || figmaName?.includes('link')) {
-      return 'Link';
-    }
-    return 'Button'; // Default fallback
+  mapSizeToVariant(size?: string): string {
+    return this.sizeMapping[size || ''] || 'text-sm';
   }
 
-  /**
-   * Map Figma size to low-code variant
-   */
-  private mapSizeToVariant(size?: string): string {
-    return (size && this.sizeMapping[size]) || 'text-sm';
+  mapHierarchyToColor(hierarchy?: string): string {
+    return this.hierarchyMapping[hierarchy || ''] || 'brand';
   }
 
-  /**
-   * Map Figma hierarchy to low-code color
-   */
-  private mapHierarchyToColor(hierarchy?: string): string {
-    return (hierarchy && this.hierarchyMapping[hierarchy]) || 'brand';
-  }
-
-  /**
-   * Map Figma state to disabled property
-   */
-  private mapStateToDisabled(state?: string): boolean {
+  mapStateToDisabled(state?: string): boolean {
     return state === 'Disabled';
   }
 
-  /**
-   * Generate display name from Figma component name
-   */
-  private generateDisplayName(figmaName?: string): string {
-    const cleanName = figmaName?.replace(/[\/\s]/g, '_') || 'Component';
-    return `${cleanName}_${Math.floor(Math.random() * 1000)}`;
+  generateDisplayName(name?: string): string {
+    return `${(name || 'Component').replace(/[\/\s]/g, '_')}_${Math.floor(Math.random() * 1000)}`;
   }
 
-  /**
-   * Generate random component ID
-   */
-  private generateId(): string {
-    return 'b_' + Math.random().toString(36).substr(2, 5);
+  generateId(): string {
+    return 'b_' + Math.random().toString(36).slice(2, 7);
   }
 
-  /**
-   * Batch transform multiple Figma components
-   */
-  transformBatch(figmaComponents: FigmaJson[]): TransformResult {
-    const results: TransformResult = {};
-    
-    figmaComponents.forEach((figmaJson, index) => {
-      const componentId = this.generateId();
-      const transformed = this.transform(figmaJson, componentId);
-      Object.assign(results, transformed);
-    });
-
-    return results;
+  transformBatch(components: FigmaJson[]): Record<string, any> {
+    return components.reduce((acc, json) => {
+      const id = this.generateId();
+      Object.assign(acc, this.transform(json, id));
+      return acc;
+    }, {});
   }
 
-  /**
-   * Add custom mapping rules
-   */
-  addCustomMapping(mappingType: 'size' | 'hierarchy' | 'icon' | 'color', key: string, value: string | ColorInfo): void {
-    switch(mappingType) {
-      case 'size':
-        this.sizeMapping[key] = value as string;
-        break;
-      case 'hierarchy':
-        this.hierarchyMapping[key] = value as string;
-        break;
-      case 'icon':
-        this.iconMapping[key] = value as string;
-        break;
-      case 'color':
-        this.colorVariableMapping[key] = value as ColorInfo;
-        break;
-    }
+  addCustomMapping(type: 'size' | 'hierarchy' | 'icon' | 'color', key: string, value: any): void {
+    const map: any = {
+      size: this.sizeMapping,
+      hierarchy: this.hierarchyMapping,
+      icon: this.iconMapping,
+      color: this.colorVariableMapping
+    };
+    if (map[type]) map[type][key] = value;
   }
 }
 
-// Usage example
+async function fetchFigmaJson(fileUrl: string): Promise<FigmaJson> {
+  const response = await fetch('https://api.qa.unifyapps.com/api-endpoint/figma/Fetch-Figma-Details', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileUrl })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Figma data: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 const transformer = new FigmaToLowcodeTransformer();
 
-// Transform the provided Figma JSON
-function transformFigmaToLowcode(figmaJson: FigmaJson): TransformResult | null {
+function isButtonLinkComponent(figmaData: FigmaJson): boolean {
+  const nodes = figmaData?.result?.nodes || figmaData?.Result?.nodes;
+  if (!nodes) return false;
+
+  const [_, mainNodeData] = Object.entries(nodes)[0];
+  const mainNode = mainNodeData.document;
+  const children = mainNode.children || [];
+
+  const instanceNodes = children.filter(child => child.type === "INSTANCE");
+  const compNodes = children.filter(child => child.type === "COMPONENT");
+  const textNodes = children.filter(child => child.type === "TEXT");
+
+  const firstNodeWithComponentSets = Object.values(nodes).find(
+    node => node.componentSets && typeof node.componentSets === "object"
+  );
+
+  const firstComponentSetName = firstNodeWithComponentSets
+    ? Object.values(firstNodeWithComponentSets.componentSets!)[0]?.name
+    : null;
+
+  const isButtonsLink = firstComponentSetName === "Buttons/Link";
+  const textContentCheck = textNodes[0]?.characters?.trim().length > 0;
+
+  const instanceNamesCheck = instanceNodes.every(inst =>
+    typeof inst.name === "string" && /(icon|clock|Dot|Loading)/i.test(inst.name)
+  );
+
+  const compCheck = compNodes.every(inst =>
+    typeof inst.name === "string" && /(icon|clock|Dot|Loading)/i.test(inst.name)
+  );
+
+  return isButtonsLink && (instanceNamesCheck || compCheck);
+}
+
+async function transformFigmaFromUrl(fileUrl: string) {
   try {
-    const result = transformer.transform(figmaJson, 'b_CHVXi');
-    return result;
+    const figmaJson = await fetchFigmaJson(fileUrl);
+
+    if (isButtonLinkComponent(figmaJson)) {
+      const result = transformer.transform(figmaJson, 'b_CHVXi');
+      fs.writeFileSync('no-code.json', JSON.stringify(result, null, 2), 'utf-8');
+      console.log('Transformed component saved to no-code.json');
+    } else {
+      console.log("Not a button link component");
+    }
   } catch (error) {
     console.error('Transformation failed:', error);
-    return null;
   }
 }
 
-// Example usage with the provided JSON
-// Transform and display result
-const transformedComponent = transformFigmaToLowcode(figmaData);
-console.log('Transformed Component:', JSON.stringify(transformedComponent, null, 2));
-
-// Export for use in other modules
-export default FigmaToLowcodeTransformer;
-export type { 
-  FigmaJson, 
-  FigmaNode, 
-  TransformResult, 
-  LowcodeComponent, 
-  ColorInfo, 
-  Icons 
-};
+const fileUrl = "https://www.figma.com/design/4r7C2sI9cktH4T8atJhmrW/Component-Sheet?node-id=1-5856&t=WXFqG3eV38cOh5qT-4";
+transformFigmaFromUrl(fileUrl);

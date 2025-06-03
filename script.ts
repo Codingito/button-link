@@ -31,7 +31,7 @@ interface FigmaJson {
     nodes: Record<string, { document: FigmaNode; componentSets?: Record<string, { name: string }> }>;
   };
 }
-
+//Transformer Fn:
 class FigmaToLowcodeTransformer {
   sizeMapping: Record<string, string>;
   hierarchyMapping: Record<string, string>;
@@ -203,6 +203,8 @@ async function fetchFigmaJson(fileUrl: string): Promise<FigmaJson> {
 
 const transformer = new FigmaToLowcodeTransformer();
 
+
+//Identifier fn:
 function isButtonLinkComponent(figmaData: FigmaJson): boolean {
   const nodes = figmaData?.result?.nodes || figmaData?.Result?.nodes;
   if (!nodes) return false;
